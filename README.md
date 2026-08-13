@@ -2,18 +2,29 @@
 
 **서버 없이, 브라우저 하나로 완결되는 무한 캔버스 드로잉 앱.**
 
+<a href="https://canvas.furryarts.net/">
+  <img alt="Live Demo" src="https://img.shields.io/badge/DEMO-canvas.furryarts.net-6f42c1?style=for-the-badge">
+</a>
+
+### [지금 바로 체험하기 → canvas.furryarts.net](https://canvas.furryarts.net/)
+
+설치도, 회원가입도 없이 링크만 열면 바로 그릴 수 있습니다.
+
 512×512 타일이 사방으로 무한히 확장되는 캔버스 위에서, Krita 같은 손맛으로 그림을 그립니다. 그림도, 도큐먼트 목록도, 자동 저장본도 전부 브라우저 안(OPFS + IndexedDB)에만 있습니다 — 백엔드도, 로그인도, 네트워크도 필요 없습니다.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![SvelteKit](https://img.shields.io/badge/built%20with-SvelteKit%20%2B%20Svelte%205-ff3e00.svg)](https://svelte.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
+[![Hosted on Cloudflare Pages](https://img.shields.io/badge/hosted%20on-Cloudflare%20Pages-f38020.svg?logo=cloudflare&logoColor=white)](https://canvas.furryarts.net/)
 
 ## 목차
 
+- [데모](#데모)
 - [왜 서버가 없나요](#왜-서버가-없나요)
 - [주요 특징](#주요-특징)
 - [단축키](#단축키)
 - [설치 및 실행](#설치-및-실행)
+- [배포](#배포)
 - [저장 파일 (.infcanvas)](#저장-파일-infcanvas)
 - [서버로 내보내기 (선택 사항)](#서버로-내보내기-선택-사항)
 - [기술 스택](#기술-스택)
@@ -21,6 +32,12 @@
 - [기여](#기여)
 - [크레디트](#크레디트)
 - [라이선스](#라이선스)
+
+## 데모
+
+**[canvas.furryarts.net](https://canvas.furryarts.net/)** 에서 설치 없이 바로 사용해볼 수 있습니다. 별도 프론트엔드 배포 없이 정적 파일만으로 돌아가는 앱이라 [Cloudflare Pages](https://pages.cloudflare.com/)에 그대로 올려뒀습니다.
+
+여기서 그린 내용은 서버가 없다는 이 프로젝트의 특징 그대로, 전부 여러분의 브라우저 안에만 저장됩니다 — 데모 페이지 운영자도 여러분이 그린 그림을 볼 수 없고, 가져갈 수도 없습니다.
 
 ## 왜 서버가 없나요
 
@@ -97,6 +114,22 @@ bun run preview
 ```
 
 `adapter-static`으로 빌드되므로, 결과물(`build/`)은 서버 사이드 런타임 없이 아무 정적 호스팅에나 올리면 됩니다.
+
+## 배포
+
+라이브 데모는 [Cloudflare Pages](https://pages.cloudflare.com/)에 호스팅되어 있습니다.
+
+### 자동 배포
+
+Cloudflare Pages 대시보드에 CI/CD가 연동되어 있어, 평소에는 저장소에 푸시하면 자동으로 빌드·배포됩니다. 아래 수동 배포는 그 흐름을 타지 않고 관리자가 직접 배포해야 할 때만 씁니다.
+
+### 수동 배포 (관리자용)
+
+```bash
+bun run build && wrangler pages deploy build
+```
+
+[Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)가 설치되어 있고 `wrangler login`(또는 API 토큰)으로 Cloudflare 계정에 인증된 상태여야 합니다.
 
 ## 저장 파일 (.infcanvas)
 
