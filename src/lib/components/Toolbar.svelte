@@ -3,6 +3,7 @@
 	import Download from 'lucide-svelte/icons/download';
 	import EraserIcon from 'lucide-svelte/icons/eraser';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
+	import PipetteIcon from 'lucide-svelte/icons/pipette';
 	import ColorPicker from './ColorPicker.svelte';
 	import DocumentSwitcher from './DocumentSwitcher.svelte';
 	import { documentState } from '$lib/canvas/document.svelte';
@@ -52,18 +53,28 @@
 		>
 			<EraserIcon size={18} />
 		</button>
+		<button
+			type="button"
+			class:active={toolState.tool === 'eyedropper' || toolState.eyedropperKeyHeld}
+			aria-label="스포이드"
+			onclick={() => (toolState.tool = 'eyedropper')}
+		>
+			<PipetteIcon size={18} />
+		</button>
 
-		<label class="size">
-			{toolState.tool === 'eraser' ? '지우개 크기' : '펜 크기'}
-			<input
-				type="range"
-				min="1"
-				max="200"
-				value={toolState.activeSize}
-				oninput={(e) => (toolState.activeSize = Number((e.target as HTMLInputElement).value))}
-			/>
-			<span>{toolState.activeSize}px</span>
-		</label>
+		{#if toolState.tool !== 'eyedropper'}
+			<label class="size">
+				{toolState.tool === 'eraser' ? '지우개 크기' : '펜 크기'}
+				<input
+					type="range"
+					min="1"
+					max="200"
+					value={toolState.activeSize}
+					oninput={(e) => (toolState.activeSize = Number((e.target as HTMLInputElement).value))}
+				/>
+				<span>{toolState.activeSize}px</span>
+			</label>
+		{/if}
 	</div>
 
 	<div class="center-group">

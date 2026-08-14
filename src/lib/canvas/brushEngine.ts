@@ -206,6 +206,8 @@ export interface StrokeControllerOptions {
 	getActiveLayerId: () => string | null;
 	getSettings: () => BrushSettings;
 	onChange: () => void;
+	/** 스트로크가 끝날 때(pointerup/cancel/모드 이탈) 그 스트로크에 쓰인 설정과 함께 한 번 호출된다 */
+	onStrokeEnd: (settings: BrushSettings) => void;
 }
 
 /** 스트로크 FSM을 구독 가능한 스트림으로 만들어 반환한다 (호출부가 subscribe/unsubscribe로 생명주기 관리) */
@@ -218,7 +220,8 @@ export function createStroke$(opts: StrokeControllerOptions): Observable<void> {
 		getDocumentId,
 		getActiveLayerId,
 		getSettings,
-		onChange
+		onChange,
+		onStrokeEnd
 	} = opts;
 
 	return input.pointerDown$.pipe(
@@ -231,8 +234,11 @@ export function createStroke$(opts: StrokeControllerOptions): Observable<void> {
 			const documentId = getDocumentId();
 			if (layerId === null || tileStore === null || documentId === null) return EMPTY;
 
-			canvas.setPointerCapture(downEvent.pointerId);
 			const settings = getSettings();
+			// 스포이드가 선택된 상태의 pointerdown은 그리지 않는다 — eyedropper.ts의 별도 스트림이 처리한다
+			if (settings.tool === 'eyedropper') return EMPTY;
+
+			canvas.setPointerCapture(downEvent.pointerId);
 			const baseSize = settings.tool === 'eraser' ? settings.eraserSize : settings.brushSize;
 			const spacing = Math.max(1, baseSize * 0.15);
 			const touchedTiles = new Set<string>();
@@ -257,6 +263,7 @@ export function createStroke$(opts: StrokeControllerOptions): Observable<void> {
 				takeUntil(end$),
 				finalize(() => {
 					void flushTouchedTiles(documentId, tileStore, layerId, touchedTiles);
+					onStrokeEnd(settings);
 				}),
 				map(() => undefined)
 			);
