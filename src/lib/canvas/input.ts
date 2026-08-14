@@ -21,15 +21,21 @@ import {
 	withLatestFrom
 } from 'rxjs/operators';
 
-/** Space를 누른 상태에서 포인터다운을 하면 pan, Ctrl까지 누르고 있으면 zoom, 아니면 draw(그리기 도구가 처리) */
-export type BaseMode = 'draw' | 'pan' | 'zoom';
+/**
+ * Space를 누른 상태에서 포인터다운을 하면 pan, Ctrl까지 누르고 있으면 zoom.
+ * Space 없이 Ctrl만 누르고 있으면 eyedropper(스포이드), 아무것도 안 누르면 draw(그리기 도구가 처리).
+ * Space와 Ctrl 각각이 "어느 클러스터인가"(pan-계열 vs draw-계열)와 "그 안의 보조 동작"(zoom vs
+ * eyedropper)을 독립적으로 결정하는 구조라 두 조합 모두 하나의 파생 스트림으로 표현된다.
+ */
+export type BaseMode = 'draw' | 'pan' | 'zoom' | 'eyedropper';
 
 /**
  * 커서 모양. Space를 누르는 순간 grab(잡은 손 모양이 아니라 열린 손), 실제로 드래그하는 동안은
  * grabbing(쥔 손)으로 바뀌고, Space를 떼면 즉시 원래 도구(draw)로 돌아온다. Ctrl+Space가 눌려
- * 있으면(드래그 여부와 무관하게) zoom을 유지한다. 마우스 휠 줌은 이 상태에 영향을 주지 않는다.
+ * 있으면(드래그 여부와 무관하게) zoom을 유지한다. Space 없이 Ctrl만 누르면 eyedropper를 유지한다.
+ * 마우스 휠 줌은 이 상태에 영향을 주지 않는다.
  */
-export type CursorMode = 'draw' | 'grab' | 'grabbing' | 'zoom';
+export type CursorMode = 'draw' | 'grab' | 'grabbing' | 'zoom' | 'eyedropper';
 
 export interface PanDelta {
 	dxScreen: number;
@@ -103,7 +109,10 @@ function toCanvasLocal(
 
 export function createCanvasInput(canvas: HTMLCanvasElement): CanvasInput {
 	const baseMode$: Observable<BaseMode> = combineLatest([spaceHeld$(), ctrlHeld$()]).pipe(
-		map(([space, ctrl]): BaseMode => (!space ? 'draw' : ctrl ? 'zoom' : 'pan')),
+		map(([space, ctrl]): BaseMode => {
+			if (space) return ctrl ? 'zoom' : 'pan';
+			return ctrl ? 'eyedropper' : 'draw';
+		}),
 		distinctUntilChanged(),
 		shareReplay({ bufferSize: 1, refCount: true })
 	);
@@ -215,6 +224,7 @@ export function createCanvasInput(canvas: HTMLCanvasElement): CanvasInput {
 		map(([mode, dragging]): CursorMode => {
 			if (mode === 'zoom') return 'zoom';
 			if (mode === 'pan') return dragging ? 'grabbing' : 'grab';
+			if (mode === 'eyedropper') return 'eyedropper';
 			return 'draw';
 		}),
 		distinctUntilChanged(),

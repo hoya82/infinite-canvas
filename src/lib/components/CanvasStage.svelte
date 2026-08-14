@@ -3,6 +3,8 @@
 	import { createStroke$ } from '$lib/canvas/brushEngine';
 	import { db } from '$lib/canvas/db';
 	import { documentState } from '$lib/canvas/document.svelte';
+	import { createEyedropperPick$ } from '$lib/canvas/eyedropper';
+	import { EYEDROPPER_CURSOR } from '$lib/canvas/eyedropperCursor';
 	import { createCanvasInput, type CursorMode } from '$lib/canvas/input';
 	import { collectVisibleExistingTiles, render } from '$lib/canvas/renderer';
 	import { TileStore, tileKey } from '$lib/canvas/tileStore';
@@ -21,8 +23,21 @@
 
 	const viewport = new Viewport();
 	const cursorDiameter = $derived(toolState.activeSize * viewport.zoom);
+	// input.ts의 cursorMode는 Ctrl 홀드(momentary) 여부만 반영한다 — 스포이드가 "선택된" 도구일 때도
+	// (Ctrl을 누르지 않았어도) 같은 스포이드 커서를 보여줘야 하므로 toolState.tool을 더해 파생시킨다
+	const effectiveCursorMode = $derived(
+		cursorMode === 'eyedropper' || (cursorMode === 'draw' && toolState.tool === 'eyedropper')
+			? 'eyedropper'
+			: cursorMode
+	);
 	const canvasCursorStyle = $derived(
-		cursorMode === 'draw' ? 'none' : cursorMode === 'zoom' ? 'zoom-in' : cursorMode // 'grab' | 'grabbing' — CSS 커서 키워드와 이름이 그대로 같다
+		effectiveCursorMode === 'draw'
+			? 'none'
+			: effectiveCursorMode === 'zoom'
+				? 'zoom-in'
+				: effectiveCursorMode === 'eyedropper'
+					? EYEDROPPER_CURSOR
+					: effectiveCursorMode // 'grab' | 'grabbing' — CSS 커서 키워드와 이름이 그대로 같다
 	);
 
 	let rafHandle: number | null = null;
@@ -128,6 +143,9 @@
 			input.cursorMode$.subscribe((mode) => {
 				cursorMode = mode;
 			}),
+			input.baseMode$.subscribe((mode) => {
+				toolState.eyedropperKeyHeld = mode === 'eyedropper';
+			}),
 			merge(input.pointerMove$, input.pointerEnter$).subscribe((e) => {
 				const rect = canvas.getBoundingClientRect();
 				cursorX = e.clientX - rect.left;
@@ -150,7 +168,21 @@
 					eraserSize: toolState.eraserSize,
 					color: toolState.color
 				}),
-				onChange: scheduleRender
+				onChange: scheduleRender,
+				onStrokeEnd: (settings) => {
+					if (settings.tool !== 'eraser') toolState.addColorToHistory(settings.color);
+				}
+			}).subscribe(),
+			createEyedropperPick$({
+				canvas,
+				input,
+				viewport,
+				getTileStore: () => tileStore,
+				getActiveLayerId: () => documentState.activeLayerId,
+				getTool: () => toolState.tool,
+				onPick: (hex) => {
+					toolState.color = hex;
+				}
 			}).subscribe()
 		];
 
@@ -164,7 +196,7 @@
 
 <div bind:this={containerEl} class="canvas-stage">
 	<canvas bind:this={canvasEl} style:cursor={canvasCursorStyle}></canvas>
-	{#if cursorVisible && cursorMode === 'draw'}
+	{#if cursorVisible && effectiveCursorMode === 'draw'}
 		<div
 			class="brush-cursor"
 			style:left="{cursorX}px"
