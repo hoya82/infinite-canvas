@@ -148,19 +148,13 @@ async function hydrateTexturesFromContainer(
 	});
 }
 
-/** OPFS의 수동 저장 컨테이너를 읽어 Dexie 작업 영역으로 완전히 복원한다 */
-export async function hydrateDocumentFromOpfs(documentId: string): Promise<CanvasDocument> {
-	const fileName = await opfs.findManualSaveFileName(documentId);
-	if (!fileName) {
-		throw new Error(`저장된 .infcanvas 컨테이너를 찾을 수 없습니다: ${documentId}`);
-	}
-	const bytes = await opfs.readDocumentFile(documentId, fileName);
-	if (!bytes) {
-		throw new Error(`컨테이너 파일을 읽지 못했습니다: ${documentId}/${fileName}`);
-	}
-
-	const { manifest, tiles, textures } = unpackContainer(new Uint8Array(bytes));
-
+/** unpackContainer 결과로 Dexie 작업 영역(도큐먼트+레이어+타일+텍스처)을 완전히 교체한다 */
+async function hydrateFromContainer(
+	documentId: string,
+	manifest: ContainerManifest,
+	tileImages: TileImageEntry[],
+	textures: TextureEntry[]
+): Promise<CanvasDocument> {
 	const doc: CanvasDocument = {
 		id: documentId,
 		title: manifest.title,
@@ -176,9 +170,39 @@ export async function hydrateDocumentFromOpfs(documentId: string): Promise<Canva
 		if (layers.length > 0) await db.layers.bulkAdd(layers);
 	});
 
-	await hydrateTilesFromContainer(documentId, tiles);
+	await hydrateTilesFromContainer(documentId, tileImages);
 	await hydrateTexturesFromContainer(documentId, textures);
 
+	return doc;
+}
+
+/** OPFS의 수동 저장 컨테이너를 읽어 Dexie 작업 영역으로 완전히 복원한다 */
+export async function hydrateDocumentFromOpfs(documentId: string): Promise<CanvasDocument> {
+	const fileName = await opfs.findManualSaveFileName(documentId);
+	if (!fileName) {
+		throw new Error(`저장된 .infcanvas 컨테이너를 찾을 수 없습니다: ${documentId}`);
+	}
+	const bytes = await opfs.readDocumentFile(documentId, fileName);
+	if (!bytes) {
+		throw new Error(`컨테이너 파일을 읽지 못했습니다: ${documentId}/${fileName}`);
+	}
+
+	const { manifest, tiles, textures } = unpackContainer(new Uint8Array(bytes));
+	return hydrateFromContainer(documentId, manifest, tiles, textures);
+}
+
+/**
+ * 서버 링크에서 받아온(또는 그 밖의 임의 출처) .infcanvas 바이트로 도큐먼트를 완전히 교체한다.
+ * hydrateDocumentFromOpfs와 같은 하이드레이션을 쓰되, 그 결과를 수동 저장 파일로도 즉시 써서
+ * OPFS(진실 공급원)와 어긋나지 않게 한다 — 그래야 다음 앱 시작 때도 지금 불러온 내용이 유지된다.
+ */
+export async function hydrateDocumentFromBytes(
+	documentId: string,
+	bytes: Uint8Array<ArrayBuffer>
+): Promise<CanvasDocument> {
+	const { manifest, tiles, textures } = unpackContainer(bytes);
+	const doc = await hydrateFromContainer(documentId, manifest, tiles, textures);
+	await opfs.writeDocumentFile(documentId, opfs.manualSaveFileName(doc.title), bytes);
 	return doc;
 }
 

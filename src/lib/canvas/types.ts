@@ -84,6 +84,17 @@ export interface AppStateRecord {
 	lastOpenedDocumentId: string | null;
 }
 
+/**
+ * "이 브라우저의 이 로컬 도큐먼트가 어느 서버 URL과 링크되어 있는지".
+ * .infcanvas 컨테이너(manifest.json)에는 포함되지 않는 로컬 전용 설정이다 — 어느 폴더와
+ * 동기화할지가 파일 자체의 내용이 아니라 클라이언트 설정인 것과 같은 이유.
+ */
+export interface DocumentLinkRecord {
+	documentId: string;
+	serverUrl: string;
+	linkedAt: number;
+}
+
 export type Tool = 'brush' | 'eraser' | 'eyedropper';
 
 export interface ToolSettings {

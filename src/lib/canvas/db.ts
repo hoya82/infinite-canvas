@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type {
 	AppStateRecord,
 	CanvasDocument,
+	DocumentLinkRecord,
 	Layer,
 	TextureRecord,
 	TilePixelsRecord,
@@ -22,6 +23,7 @@ export const db = new Dexie('infinite-canvas') as Dexie & {
 	tilePixels: EntityTable<TilePixelsRecord, 'id'>;
 	textures: EntityTable<TextureRecord, 'id'>;
 	appState: EntityTable<AppStateRecord, 'id'>;
+	documentLinks: EntityTable<DocumentLinkRecord, 'documentId'>;
 };
 
 // tiles.dirty는 IndexedDB의 유효한 키 타입이 아니므로(boolean은 인덱스 키로 쓸 수 없다 — 실측:
@@ -34,4 +36,15 @@ db.version(1).stores({
 	tilePixels: 'id, documentId, [documentId+layerId]',
 	textures: 'id, documentId',
 	appState: 'id'
+});
+
+// v2: "서버와 링크하기" — documentId당 최대 하나의 링크 레코드
+db.version(2).stores({
+	documents: 'id, updatedAt',
+	layers: 'id, documentId, [documentId+order]',
+	tiles: 'id, documentId',
+	tilePixels: 'id, documentId, [documentId+layerId]',
+	textures: 'id, documentId',
+	appState: 'id',
+	documentLinks: 'documentId'
 });

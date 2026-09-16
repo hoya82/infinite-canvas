@@ -5,6 +5,7 @@
 	import Toolbar from '$lib/components/Toolbar.svelte';
 	import { documentState } from '$lib/canvas/document.svelte';
 	import { saveDocument, startAutosaveLoop } from '$lib/canvas/persistence';
+	import { startServerAutosaveLoop } from '$lib/canvas/serverLink';
 
 	const AUTOSAVE_INTERVAL_MS = 30_000;
 
@@ -41,9 +42,16 @@
 			AUTOSAVE_INTERVAL_MS
 		);
 
+		const stopServerAutosave = startServerAutosaveLoop(() => {
+			const doc = documentState.doc;
+			const url = documentState.linkedServerUrl;
+			return doc && url ? { documentId: doc.id, url } : null;
+		});
+
 		return () => {
 			window.removeEventListener('keydown', onKeydown);
 			stopAutosave();
+			stopServerAutosave();
 		};
 	});
 </script>

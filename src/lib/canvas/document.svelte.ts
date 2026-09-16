@@ -10,6 +10,8 @@ export class DocumentState {
 	loading = $state(true);
 	/** 지금 그리기 대상이 되는 레이어. M4의 레이어 패널에서 선택을 바꿀 수 있다 */
 	activeLayerId = $state<string | null>(null);
+	/** 이 도큐먼트가 링크된 서버 URL. null이면 링크되지 않은 상태 */
+	linkedServerUrl = $state<string | null>(null);
 
 	/** 정렬된(스택 하단→상단) 레이어 목록. 컴포지팅은 이 순서대로 아래에서 위로 그린다 */
 	orderedLayers = $derived(this.layers.slice().sort((a, b) => a.order - b.order));
@@ -29,6 +31,7 @@ export class DocumentState {
 			this.doc = doc;
 			this.layers = await db.layers.where('documentId').equals(doc.id).sortBy('order');
 			this.activeLayerId = this.orderedLayers.at(-1)?.id ?? null;
+			await this.refreshLink();
 		} finally {
 			this.loading = false;
 		}
@@ -37,6 +40,32 @@ export class DocumentState {
 	async refreshLayers(): Promise<void> {
 		if (!this.doc) return;
 		this.layers = await db.layers.where('documentId').equals(this.doc.id).sortBy('order');
+	}
+
+	/**
+	 * 지금 열려 있는 바로 그 도큐먼트의 OPFS 컨텐츠를 다시 읽어 반영한다(예: 서버에서 불러온
+	 * 내용을 이제 막 OPFS에도 써 둔 뒤). load()와 달리 loading을 건드리지 않는다 — loading은
+	 * +page.svelte에서 Toolbar를 포함한 전체 UI를 "불러오는 중…" 화면으로 통째로 바꿔버리는데,
+	 * 도큐먼트를 전환/최초 로드하는 게 아니라 같은 도큐먼트를 제자리에서 갱신하는 것뿐이므로 그
+	 * 화면 전환은 과하다(팝오버 등 로컬 컴포넌트 상태가 다 날아가 버린다).
+	 */
+	async reloadCurrentFromOpfs(): Promise<void> {
+		if (!this.doc) return;
+		const doc = await hydrateDocumentFromOpfs(this.doc.id);
+		this.doc = doc;
+		this.layers = await db.layers.where('documentId').equals(doc.id).sortBy('order');
+		this.activeLayerId = this.orderedLayers.at(-1)?.id ?? null;
+		await this.refreshLink();
+	}
+
+	/** documentLinks 테이블에서 현재 도큐먼트의 링크 상태를 다시 읽어 반영한다 */
+	async refreshLink(): Promise<void> {
+		if (!this.doc) {
+			this.linkedServerUrl = null;
+			return;
+		}
+		const link = await db.documentLinks.get(this.doc.id);
+		this.linkedServerUrl = link?.serverUrl ?? null;
 	}
 
 	/** 스택 맨 위에 새 레이어를 추가하고 활성 레이어로 선택한다 */

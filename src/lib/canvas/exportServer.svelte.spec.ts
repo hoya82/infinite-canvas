@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDocument } from './bootstrap';
-import { CONTAINER_MIME_TYPE, unpackContainer } from './container';
 import { db } from './db';
-import { downloadDocument, exportDocumentToServer } from './exportServer';
+import { downloadDocument } from './exportServer';
 import * as opfs from './opfs';
-import { tilePixelsRecordId, tileRecordId } from './types';
 
 describe('exportServer', () => {
 	beforeEach(async () => {
@@ -13,65 +11,6 @@ describe('exportServer', () => {
 		for (const id of await opfs.listDocumentIds()) {
 			await opfs.deleteDocumentDir(id);
 		}
-	});
-
-	it('exportDocumentToServer는 최신 상태로 저장한 뒤 완성된 컨테이너를 지정한 엔드포인트로 POST한다', async () => {
-		const doc = await createDocument('내보내기 테스트');
-		const layer = (await db.layers.where('documentId').equals(doc.id).toArray())[0];
-		await db.tiles.put({
-			id: tileRecordId(doc.id, 0, 0),
-			documentId: doc.id,
-			x: 0,
-			y: 0,
-			dirty: true
-		});
-		await db.tilePixels.put({
-			id: tilePixelsRecordId(doc.id, 0, 0, layer.id),
-			documentId: doc.id,
-			x: 0,
-			y: 0,
-			layerId: layer.id,
-			pixels: new ArrayBuffer(512 * 512 * 4),
-			webpCache: null
-		});
-
-		const fetchSpy = vi
-			.spyOn(globalThis, 'fetch')
-			.mockResolvedValue(new Response(null, { status: 200 }));
-
-		const response = await exportDocumentToServer(doc.id, 'https://example.invalid/upload');
-
-		expect(response.status).toBe(200);
-		expect(fetchSpy).toHaveBeenCalledTimes(1);
-		const [url, init] = fetchSpy.mock.calls[0];
-		expect(url).toBe('https://example.invalid/upload');
-		expect(init?.method).toBe('POST');
-		expect(init?.headers).toMatchObject({ 'Content-Type': CONTAINER_MIME_TYPE });
-		expect(init?.body).toBeInstanceOf(Blob);
-
-		// 저장이 실제로 일어났는지(dirty가 지워졌는지) 함께 확인한다
-		const tileAfter = await db.tiles.get(tileRecordId(doc.id, 0, 0));
-		expect(tileAfter?.dirty).toBe(false);
-
-		const bytes = await (init!.body as Blob).arrayBuffer();
-		const { manifest } = unpackContainer(new Uint8Array(bytes));
-		expect(manifest.title).toBe('내보내기 테스트');
-
-		fetchSpy.mockRestore();
-	});
-
-	it('exportDocumentToServer는 서버가 실패 응답(4xx/5xx)을 주면 에러를 던진다', async () => {
-		const doc = await createDocument('실패 테스트');
-
-		const fetchSpy = vi
-			.spyOn(globalThis, 'fetch')
-			.mockResolvedValue(new Response(null, { status: 500 }));
-
-		await expect(exportDocumentToServer(doc.id, 'https://example.invalid/upload')).rejects.toThrow(
-			/500/
-		);
-
-		fetchSpy.mockRestore();
 	});
 
 	it('downloadDocument는 showSaveFilePicker가 없으면 <a download>로 대체한다', async () => {

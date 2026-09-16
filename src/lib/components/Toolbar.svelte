@@ -1,36 +1,94 @@
 <script lang="ts">
-	import CloudUpload from 'lucide-svelte/icons/cloud-upload';
 	import Download from 'lucide-svelte/icons/download';
 	import EraserIcon from 'lucide-svelte/icons/eraser';
+	import LinkIcon from 'lucide-svelte/icons/link';
 	import PencilIcon from 'lucide-svelte/icons/pencil';
 	import PipetteIcon from 'lucide-svelte/icons/pipette';
+	import UnlinkIcon from 'lucide-svelte/icons/unlink';
 	import ColorPicker from './ColorPicker.svelte';
 	import DocumentSwitcher from './DocumentSwitcher.svelte';
 	import { documentState } from '$lib/canvas/document.svelte';
-	import { downloadDocument, exportDocumentToServer } from '$lib/canvas/exportServer';
+	import { downloadDocument } from '$lib/canvas/exportServer';
+	import {
+		linkDocumentToServer,
+		loadDocumentFromServer,
+		unlinkDocumentFromServer
+	} from '$lib/canvas/serverLink';
 	import { toolState } from '$lib/canvas/toolState.svelte';
 
 	let pickerOpen = $state(false);
-	let exportOpen = $state(false);
-	let endpointUrl = $state('');
-	let exportStatus = $state<'idle' | 'sending' | 'sent' | 'error'>('idle');
+	let linkOpen = $state(false);
+	let linkUrlInput = $state('');
+	let linkBusy = $state(false);
+	let linkError = $state<string | null>(null);
+	let loadStatus = $state<'idle' | 'loading' | 'loaded' | 'error'>('idle');
+
+	const isLinked = $derived(documentState.linkedServerUrl !== null);
 
 	async function handleDownload(): Promise<void> {
 		if (!documentState.doc) return;
 		await downloadDocument(documentState.doc.id);
 	}
 
-	async function submitExport(e: SubmitEvent): Promise<void> {
+	async function submitLink(e: SubmitEvent): Promise<void> {
 		e.preventDefault();
-		if (!documentState.doc || !endpointUrl.trim()) return;
-		exportStatus = 'sending';
+		const doc = documentState.doc;
+		const url = linkUrlInput.trim();
+		if (!doc || !url) return;
+
+		linkBusy = true;
+		linkError = null;
 		try {
-			await exportDocumentToServer(documentState.doc.id, endpointUrl.trim());
-			exportStatus = 'sent';
+			const outcome = await linkDocumentToServer(doc.id, url, () =>
+				confirm('이 서버에 이미 저장된 캔버스가 있습니다. 불러와서 지금 로컬 내용을 덮어쓸까요?')
+			);
+			if (outcome === 'loaded-remote') {
+				await documentState.reloadCurrentFromOpfs();
+			} else if (outcome === 'pushed-local') {
+				await documentState.refreshLink();
+			}
+			if (outcome !== 'cancelled') {
+				linkUrlInput = '';
+				linkOpen = false;
+			}
 		} catch (err) {
-			console.error('서버 내보내기 실패', err);
-			exportStatus = 'error';
+			console.error('서버 링크 실패', err);
+			linkError = '링크 실패';
+		} finally {
+			linkBusy = false;
 		}
+	}
+
+	async function handleManualLoad(): Promise<void> {
+		const doc = documentState.doc;
+		const url = documentState.linkedServerUrl;
+		if (!doc || !url) return;
+		if (!confirm('서버의 최신 캔버스를 불러옵니다. 지금 로컬 내용을 덮어씁니다. 계속할까요?'))
+			return;
+
+		loadStatus = 'loading';
+		try {
+			const loaded = await loadDocumentFromServer(doc.id, url);
+			if (loaded) {
+				await documentState.reloadCurrentFromOpfs();
+				loadStatus = 'loaded';
+				setTimeout(() => {
+					if (loadStatus === 'loaded') loadStatus = 'idle';
+				}, 1500);
+			} else {
+				loadStatus = 'error';
+			}
+		} catch (err) {
+			console.error('서버에서 불러오기 실패', err);
+			loadStatus = 'error';
+		}
+	}
+
+	async function handleUnlink(): Promise<void> {
+		if (!documentState.doc) return;
+		await unlinkDocumentFromServer(documentState.doc.id);
+		await documentState.refreshLink();
+		linkOpen = false;
 	}
 </script>
 
@@ -100,22 +158,45 @@
 			<Download size={18} />
 		</button>
 
-		<div class="export-wrap">
-			<button type="button" aria-label="서버로 내보내기" onclick={() => (exportOpen = !exportOpen)}>
-				<CloudUpload size={18} />
+		<div class="link-wrap">
+			<button
+				type="button"
+				class:active={isLinked}
+				aria-label={isLinked ? '서버 연결됨 (관리)' : '서버와 링크하기'}
+				onclick={() => (linkOpen = !linkOpen)}
+			>
+				<LinkIcon size={18} />
 			</button>
-			{#if exportOpen}
-				<form class="export-popover" onsubmit={submitExport}>
-					<input type="url" placeholder="https://..." bind:value={endpointUrl} required />
-					<button type="submit">보내기</button>
-					{#if exportStatus === 'sending'}
-						<span class="status">전송 중…</span>
-					{:else if exportStatus === 'sent'}
-						<span class="status">완료</span>
-					{:else if exportStatus === 'error'}
-						<span class="status error">실패</span>
+			{#if linkOpen}
+				<div class="link-popover">
+					{#if isLinked}
+						<span class="linked-url" title={documentState.linkedServerUrl ?? ''}>
+							{documentState.linkedServerUrl}
+						</span>
+						<button type="button" onclick={handleManualLoad}>불러오기</button>
+						<button type="button" class="unlink" onclick={handleUnlink}>
+							<UnlinkIcon size={13} />
+							연결 해제
+						</button>
+						{#if loadStatus === 'loading'}
+							<span class="status">불러오는 중…</span>
+						{:else if loadStatus === 'loaded'}
+							<span class="status">완료</span>
+						{:else if loadStatus === 'error'}
+							<span class="status error">실패</span>
+						{/if}
+					{:else}
+						<form onsubmit={submitLink}>
+							<input type="url" placeholder="https://..." bind:value={linkUrlInput} required />
+							<button type="submit" disabled={linkBusy}>
+								{linkBusy ? '링크 중…' : '링크하기'}
+							</button>
+							{#if linkError}
+								<span class="status error">{linkError}</span>
+							{/if}
+						</form>
 					{/if}
-				</form>
+				</div>
 			{/if}
 		</div>
 	</div>
@@ -183,11 +264,11 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.export-wrap {
+	.link-wrap {
 		position: relative;
 	}
 
-	.export-popover {
+	.link-popover {
 		position: absolute;
 		top: 34px;
 		right: 0;
@@ -202,7 +283,13 @@
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 	}
 
-	.export-popover input {
+	.link-popover form {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.link-popover input {
 		box-sizing: border-box;
 		background: #1e1e1e;
 		border: 1px solid #444;
@@ -211,10 +298,36 @@
 		border-radius: 3px;
 	}
 
-	.export-popover button[type='submit'] {
+	.link-popover button {
 		width: auto;
 		height: auto;
 		padding: 5px 0;
+		background: #3a3a3a;
+		border: none;
+		color: inherit;
+		border-radius: 3px;
+		cursor: pointer;
+	}
+
+	.link-popover button:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	.link-popover .unlink {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 5px;
+		color: #ff8080;
+	}
+
+	.linked-url {
+		font-size: 11px;
+		opacity: 0.8;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.status {
