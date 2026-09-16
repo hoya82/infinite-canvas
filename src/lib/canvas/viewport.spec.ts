@@ -85,4 +85,36 @@ describe('Viewport', () => {
 		expect(range.minY).toBe(-2);
 		expect(range.maxY).toBe(-1);
 	});
+
+	it('centerWorld는 화면 정중앙의 월드 좌표를 반환한다', () => {
+		const viewport = makeViewport(TILE_SIZE, TILE_SIZE);
+		viewport.panX = 0;
+		viewport.panY = 0;
+		viewport.zoom = 1;
+
+		expect(viewport.centerWorld()).toEqual({ x: TILE_SIZE / 2, y: TILE_SIZE / 2 });
+	});
+
+	it('panCenterTo는 줌은 그대로 두고 화면 정중앙이 주어진 월드 좌표를 가리키도록 pan만 옮긴다', () => {
+		const viewport = makeViewport(800, 600);
+		viewport.zoom = 2;
+
+		viewport.panCenterTo(1000, -500);
+
+		expect(viewport.zoom).toBe(2);
+		expect(viewport.centerWorld().x).toBeCloseTo(1000);
+		expect(viewport.centerWorld().y).toBeCloseTo(-500);
+	});
+
+	it('jumpTo는 줌을 clamp해 세팅한 뒤 화면 정중앙을 그 월드 좌표로 옮긴다', () => {
+		const viewport = makeViewport(800, 600);
+
+		viewport.jumpTo(256, 256, 4);
+		expect(viewport.zoom).toBe(4);
+		expect(viewport.centerWorld().x).toBeCloseTo(256);
+		expect(viewport.centerWorld().y).toBeCloseTo(256);
+
+		viewport.jumpTo(0, 0, 1000); // clamp 확인
+		expect(viewport.zoom).toBeLessThanOrEqual(32);
+	});
 });

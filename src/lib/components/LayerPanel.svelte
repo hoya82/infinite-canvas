@@ -148,12 +148,12 @@
 	.layer-panel {
 		display: flex;
 		flex-direction: column;
-		width: 260px;
+		flex: 1;
+		min-height: 0;
 		overflow-x: hidden;
 		background: #2b2b2b;
 		color: #eee;
 		font-size: 13px;
-		border-left: 1px solid #444;
 	}
 
 	header {

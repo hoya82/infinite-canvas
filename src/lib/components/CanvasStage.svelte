@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { merge } from 'rxjs';
 	import { createStroke$ } from '$lib/canvas/brushEngine';
+	import { consumeInitialUrlAddress, jumpToAddress } from '$lib/canvas/coordinateAddress';
 	import { db } from '$lib/canvas/db';
 	import { documentState } from '$lib/canvas/document.svelte';
 	import { createEyedropperPick$ } from '$lib/canvas/eyedropper';
@@ -9,7 +11,7 @@
 	import { collectVisibleExistingTiles, render } from '$lib/canvas/renderer';
 	import { TileStore, tileKey } from '$lib/canvas/tileStore';
 	import { toolState } from '$lib/canvas/toolState.svelte';
-	import { Viewport } from '$lib/canvas/viewport.svelte';
+	import { activeViewport, Viewport } from '$lib/canvas/viewport.svelte';
 
 	let canvasEl: HTMLCanvasElement | undefined = $state();
 	let containerEl: HTMLDivElement | undefined = $state();
@@ -22,6 +24,10 @@
 	let cursorMode = $state<CursorMode>('draw');
 
 	const viewport = new Viewport();
+	activeViewport.current = viewport;
+	onDestroy(() => {
+		if (activeViewport.current === viewport) activeViewport.current = null;
+	});
 	const cursorDiameter = $derived(toolState.activeSize * viewport.zoom);
 	// input.ts의 cursorMode는 Ctrl 홀드(momentary) 여부만 반영한다 — 스포이드가 "선택된" 도구일 때도
 	// (Ctrl을 누르지 않았어도) 같은 스포이드 커서를 보여줘야 하므로 toolState.tool을 더해 파생시킨다
@@ -69,6 +75,20 @@
 			backgroundTexture
 		});
 	}
+
+	// 뷰포트가 바뀌면(누가 바꿨든) 다시 그린다. pan/zoom 드래그 같은 내부 핸들러는 이미 각자
+	// scheduleRender()를 직접 호출하지만(중복 호출은 idempotent라 무해하다), 좌표 표시줄의
+	// "이동"처럼 이 컴포넌트 밖에서 viewport를 직접 mutate하는 경로는 그 호출이 없어 뷰가
+	// 바뀌어도 다른 이유로 재렌더링이 트리거되기 전까지 화면이 그대로인 버그가 있었다 —
+	// viewport 자체의 변화를 구독해 그런 경로를 전부 커버한다.
+	$effect(() => {
+		void viewport.panX;
+		void viewport.panY;
+		void viewport.zoom;
+		void viewport.width;
+		void viewport.height;
+		scheduleRender();
+	});
 
 	// 도큐먼트가 (처음 또는 전환으로) 바뀌면 타일 스토어를 새로 만든다
 	$effect(() => {
@@ -121,7 +141,11 @@
 
 		const resizeObserver = new ResizeObserver(resize);
 		resizeObserver.observe(container);
-		resize();
+		resize(); // 여기서 viewport.width/height가 처음 정해진다 — 아래 주소 점프의 "정중앙" 계산이 이 값에 의존한다
+
+		// 주소창에 좌표가 실려 있으면(공유 링크로 열었을 때) 앱 세션당 한 번만 그 위치로 점프한다
+		const initialAddress = consumeInitialUrlAddress(window.location.search);
+		if (initialAddress) jumpToAddress(viewport, initialAddress);
 
 		const input = createCanvasInput(canvas);
 		const subscriptions = [

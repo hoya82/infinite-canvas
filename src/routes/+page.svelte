@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import CanvasStage from '$lib/components/CanvasStage.svelte';
+	import CoordinateBar from '$lib/components/CoordinateBar.svelte';
 	import LayerPanel from '$lib/components/LayerPanel.svelte';
 	import Toolbar from '$lib/components/Toolbar.svelte';
 	import { documentState } from '$lib/canvas/document.svelte';
@@ -68,7 +69,10 @@
 					{saveStatus === 'saving' ? '저장 중…' : '저장됨'}
 				</div>
 			</div>
-			<LayerPanel />
+			<div class="sidebar">
+				<CoordinateBar />
+				<LayerPanel />
+			</div>
 		</div>
 	{/if}
 </main>
@@ -91,6 +95,13 @@
 		position: relative;
 		flex: 1;
 		min-width: 0;
+	}
+
+	.sidebar {
+		display: flex;
+		flex-direction: column;
+		width: 260px;
+		border-left: 1px solid #444;
 	}
 
 	.save-status {

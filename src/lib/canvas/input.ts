@@ -86,16 +86,25 @@ function spaceHeld$(): Observable<boolean> {
 	return merge(down$, up$, blur$).pipe(startWith(false), distinctUntilChanged());
 }
 
-/** keydown/keyup 어떤 이벤트든 그 시점의 Ctrl 눌림 상태를 정확히 담고 있으므로 그대로 매핑한다 */
+/**
+ * keydown/keyup 어떤 이벤트든 그 시점의 Ctrl 눌림 상태를 정확히 담고 있으므로 그대로 매핑한다.
+ * 단, 입력 필드에 포커스가 있는 동안 Ctrl이 눌린 것(Ctrl+V/C/A/Z 등 텍스트 편집 단축키)까지
+ * "eyedropper 모드 진입"으로 해석하면 안 되므로, "눌림 시작"만 isEditableTarget으로 걸러낸다.
+ * "떼짐"(e.ctrlKey === false)은 절대 거르지 않는다 — spaceHeld$의 up$와 같은 이유로, 만약
+ * 걸러내면 입력 필드에 포커스가 있는 채로 Ctrl을 늦게 떼는 경우 눌림 상태가 고정되어버린다.
+ */
 function ctrlHeld$(): Observable<boolean> {
-	return merge(
+	const keyEvent$ = merge(
 		fromEvent<KeyboardEvent>(window, 'keydown'),
 		fromEvent<KeyboardEvent>(window, 'keyup')
 	).pipe(
-		map((e) => e.ctrlKey),
-		startWith(false),
-		distinctUntilChanged()
+		filter((e) => !e.ctrlKey || !isEditableTarget(e.target)),
+		map((e) => e.ctrlKey)
 	);
+	// 창 포커스를 잃으면(Alt+Tab 등) 눌림 상태가 그대로 고정되는 것을 방지
+	const blur$ = fromEvent(window, 'blur').pipe(map(() => false));
+
+	return merge(keyEvent$, blur$).pipe(startWith(false), distinctUntilChanged());
 }
 
 function toCanvasLocal(
